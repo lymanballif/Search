@@ -29,6 +29,11 @@ struct TabBar: View {
     /// How wide the doors at the far end are, extension buttons included.
     @State private var doors: CGFloat = 0
 
+    private var emptySpaceDoubleClick: (() -> Void)? {
+        guard browser.prefs.tabDoubleClick == .newTab else { return nil }
+        return { browser.newTab() }
+    }
+
     var body: some View {
         // A GeometryReader is only here to measure the width. Its content is
         // put in a stack of its own and told to fill it: left to itself a
@@ -43,7 +48,7 @@ struct TabBar: View {
             ZStack(alignment: .leading) {
                 // The empty half of the strip is what you grab to move the
                 // window; the tabs keep the run they sit on.
-                DragStrip(reserved: lights + dot + leading + (making ? min(540, row.room) : row.run) + Metrics.tabGap + Metrics.plusWidth, trailing: doors + 12, onDoubleClick: browser.newTab)
+                DragStrip(reserved: lights + dot + leading + (making ? min(540, row.room) : row.run) + Metrics.tabGap + Metrics.plusWidth, trailing: doors + 12, onDoubleClick: emptySpaceDoubleClick)
                 // And the corner the lights sit in, which is title bar too —
                 // the one stretch left to take hold of when tabs fill the row.
                 DragStrip()

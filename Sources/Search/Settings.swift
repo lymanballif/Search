@@ -532,6 +532,15 @@ struct SettingsPanel: View {
         case "sidebar.player": Switch(on: $prefs.showsPlayer)
         case "glyph": Segmented(options: Glyph.allCases.map { ($0, $0.title) }, selection: $prefs.glyph)
         case "tabs.reading": Switch(on: $prefs.showsReading)
+        case "tabs.doubleClick":
+            Picker("", selection: $prefs.tabDoubleClick) {
+                ForEach(TabDoubleClick.allCases) { choice in
+                    Text(choice.title).tag(choice)
+                }
+            }
+            .labelsHidden()
+            .pickerStyle(.menu)
+            .fixedSize()
         case "tabs.give": Switch(on: $prefs.tabsGive)
         case "bookmarks.bar": Switch(on: $prefs.bookmarksBar)
         case "motion.light": Switch(on: $prefs.lightMotion)
@@ -670,6 +679,7 @@ struct SettingsPanel: View {
         case "profiles.oneWindow": Switch(on: $prefs.profilesInOneWindow)
         case "spaces.links": Switch(on: $prefs.sendsLinksToSpaces)
         case "pins.keep": Switch(on: $prefs.pinsKeepSite)
+        case "pins.typedAside": Switch(on: $prefs.pinsTypedAside)
         case "pins.list": Switch(on: $prefs.listsPins)
         case "newtab.floating": Switch(on: $prefs.floatingNewTab)
         case "newtab.recent": Switch(on: $prefs.recentInNewTab)

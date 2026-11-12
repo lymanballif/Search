@@ -91,11 +91,16 @@ struct SideBar: View {
         browser.fullScreen ? 0 : max(0, min(Metrics.sideLights, width - 20 - Metrics.helmDoors))
     }
 
+    private var emptySpaceDoubleClick: (() -> Void)? {
+        guard browser.prefs.tabDoubleClick == .newTab else { return nil }
+        return { browser.newTab() }
+    }
+
     var body: some View {
         ZStack(alignment: .top) {
             // Not under the card for a new space: it isn't made of views that
             // would take the click first.
-            DragStrip(reserved: 0, below: browser.makingSpace ? .greatestFiniteMagnitude : rowsEnd, onDoubleClick: browser.newTab)
+            DragStrip(reserved: 0, below: browser.makingSpace ? .greatestFiniteMagnitude : rowsEnd, onDoubleClick: emptySpaceDoubleClick)
 
             // The band the lights sit in is this mode's title bar: the window
             // is dragged by it and a double-click fills the screen with it,
@@ -1179,6 +1184,7 @@ private struct SideRow: View, Equatable {
     private let refusals: Int
     /// Its cross is a minus: closing it puts its page away (Browser.putsAway).
     private let putsAway: Bool
+    private var closable: Bool { tab.pin == nil || !tab.asleep }
 
     init(browser: Browser, prefs: Preferences, tab: Tab, live: Bool, pill: Namespace.ID,
          close: @escaping () -> Void, interactive: Bool = true) {
@@ -1278,7 +1284,7 @@ private struct SideRow: View, Equatable {
                 // Under the pointer the cross takes its place, unless the
                 // ring or the speaker already holds the end of the row.
                 PeekBadge(page: page, size: 16)
-                    .opacity(hovering && !status ? 0 : 1)
+                    .opacity(hovering && closable && !status ? 0 : 1)
             }
 
             if interactive, !editing, let number = shortcutNumbers[tab.id] {
@@ -1297,8 +1303,8 @@ private struct SideRow: View, Equatable {
                 .frame(width: 15, height: 15)
                 // The cross takes this place while the pointer is here; the
                 // speaker moves one place in, clear of the cross's reach.
-                .opacity(hovering && !speaker ? 0 : 1)
-                .padding(.trailing, hovering && speaker ? 23 : 0)
+                .opacity(hovering && closable && !speaker ? 0 : 1)
+                .padding(.trailing, hovering && closable && speaker ? 23 : 0)
             }
         }
         .padding(.trailing, status || peeking ? 7 : 0)
@@ -1309,7 +1315,7 @@ private struct SideRow: View, Equatable {
         // doesn't jump on each row the pointer passes.
         .mask {
             ZStack {
-                Rectangle().opacity(hovering && !editing && !status ? 0 : 1)
+                Rectangle().opacity(hovering && closable && !editing && !status ? 0 : 1)
                 HStack(spacing: 0) {
                     Rectangle()
                     LinearGradient(colors: [.black, .clear], startPoint: .leading, endPoint: .trailing)
@@ -1319,7 +1325,7 @@ private struct SideRow: View, Equatable {
             }
         }
         .overlay(alignment: .trailing) {
-            if !editing {
+            if !editing && closable {
                 ZStack {
                     if hovering {
                         // A pinned row is put down, not closed (see

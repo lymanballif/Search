@@ -540,7 +540,7 @@ struct AddressField: NSViewRepresentable {
         if want != coordinator.synced {
             coordinator.synced = want
             field.stringValue = want
-            coordinator.select(from: browser.typed.count, in: field)
+            coordinator.select(from: browser.typed.utf16.count, in: field)
         }
 
         let words = Self.placeholderWords(for: browser)
@@ -628,7 +628,7 @@ struct AddressField: NSViewRepresentable {
             // A draft come back to its blank tab is carried on, not typed
             // over: the caret after it. An address ⌘L raises is selected whole.
             if browser.active?.isBlank == true, !browser.typed.isEmpty {
-                select(from: browser.typed.count, in: field)
+                select(from: browser.typed.utf16.count, in: field)
             } else {
                 editor.selectAll(nil)
             }
@@ -665,7 +665,7 @@ struct AddressField: NSViewRepresentable {
 
             field.stringValue = text + ending
             synced = field.stringValue
-            select(from: text.count, in: field)
+            select(from: text.utf16.count, in: field)
         }
 
         /// The part after the caret, shown as selected, so the next keystroke
@@ -676,9 +676,15 @@ struct AddressField: NSViewRepresentable {
                 .backgroundColor: NSColor(Palette.ink.opacity(0.12)),
                 .foregroundColor: Palette.NS.ink,
             ]
-            let length = field.stringValue.count
-            guard start <= length else { return }
+            let length = field.stringValue.utf16.count
+            guard start >= 0, start <= length else { return }
             editor.selectedRange = NSRange(location: start, length: length - start)
+            // AppKit reveals the end of a selection. An offered address can
+            // be much longer than the field: keep the site and what was typed
+            // in view, while leaving the offered ending selected to replace.
+            if start < length {
+                editor.scrollRangeToVisible(NSRange(location: 0, length: start))
+            }
         }
 
         func control(

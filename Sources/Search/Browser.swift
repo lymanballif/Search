@@ -4266,6 +4266,9 @@ final class Browser: NSObject, ObservableObject {
     /// behind; closing that blank tab closes the window.
     func close(_ tab: Tab) {
         guard let index = tabs.firstIndex(where: { $0.id == tab.id }) else { return }
+        // A pin already put down has nothing left to close. In particular,
+        // leave() must not move the selection away from the page in front.
+        guard tab.pin == nil || !tab.asleep else { return }
         let pair = split(for: tab)
         let partner = pair.flatMap { pair in tabs.first { $0.id == pair.partner(of: tab.id) } }
         detachSplit(tab)
@@ -6841,6 +6844,8 @@ final class Browser: NSObject, ObservableObject {
             }
         } else if launching || aside {
             open(offer.url, foreground: true, from: active, loose: true)
+        } else if prefs.pinsTypedAside, let tab = active ?? tabs.first, tab.pin != nil {
+            open(offer.url, foreground: true, from: tab)
         } else {
             (active ?? tabs.first)?.go(to: offer.url)
         }
@@ -6951,6 +6956,8 @@ final class Browser: NSObject, ObservableObject {
         if launching {
             // The floating new tab, as Return: a tab of its own.
             open(url, foreground: true, from: active, loose: true)
+        } else if prefs.pinsTypedAside, let tab = active ?? tabs.first, tab.pin != nil {
+            open(url, foreground: true, from: tab)
         } else {
             (active ?? tabs.first)?.go(to: url)
         }
@@ -7038,6 +7045,10 @@ final class Browser: NSObject, ObservableObject {
             // Opened behind the page by hand, as a ⌘-clicked link is: it may
             // wait to load (Settings › Tabs › Load background tabs…).
             open(url, foreground: front, from: active, mayWait: true)
+        } else if prefs.pinsTypedAside, let tab = active ?? tabs.first, tab.pin != nil {
+            // A pin kept as a place: typing somewhere else opens beside it,
+            // just as ⇧⌘Return does, without changing the pin or its home.
+            open(url, foreground: true, from: tab)
         } else {
             (active ?? tabs.first)?.go(to: url)
         }

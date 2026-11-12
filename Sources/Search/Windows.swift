@@ -72,7 +72,9 @@ final class SceneSlot: ObservableObject {
     @Published private(set) var browser: Browser
 
     private init() {
-        let browser = Browser()
+        // The scene represents the first saved window, even when a profile
+        // switch left a different space in the global last-used setting.
+        let browser = Browser(record: Browsers.read().first)
         browser.inScene = true
         self.browser = browser
         Browsers.register(browser)
@@ -506,7 +508,9 @@ enum Browsers {
 
     /// At launch, once the first window is up.
     static func restoreOnce() {
-        guard !restored else { return }
+        // SwiftUI's onAppear can precede the native window attachment. A
+        // merged profile cannot tuck that scene away until it has a window.
+        guard !restored, primary?.window != nil else { return }
         restored = true
         restore()
     }

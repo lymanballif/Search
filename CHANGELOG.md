@@ -13,6 +13,9 @@ in [ROADMAP.md](ROADMAP.md).
 
 ### Fixed
 
+- A completed address keeps the site and what you typed in view, instead of scrolling to the end of a long URL. Completion selection also counts Unicode correctly. ([#1055](https://github.com/driceroland/Search/issues/1055))
+- A pin put down no longer keeps a stale page picture in the tab switcher or an active minus button in its row. Closing it again leaves the selected page alone. ([#1050](https://github.com/driceroland/Search/issues/1050))
+- With Profiles in one window on, restoring the visible profile waits for the first native window and uses its saved space, so a tucked profile does not come back as a separate empty window. ([#1060](https://github.com/driceroland/Search/issues/1060))
 - Move to Group in a tab's right-click menu moves every tab picked with it, as dragging them onto a group does, where it moved only the tab clicked.
 - An extension's right-click items for a picture, Are.na's Add to Are.na for one, show on pictures that aren't links: with an extension that adds such items, the page keeps WebKit's menu there, whose Copy Image and Download Image are Search's own.
 - With more than one window open, a click in the puzzle button's list of extensions opens the extension or pins it, where it only closed the list: every window's list followed one shared switch, and the click closed them all.
@@ -30,6 +33,8 @@ in [ROADMAP.md](ROADMAP.md).
 
 ### Added
 
+- Settings › Appearance › Tabs can make a double-click beside the tabs follow the Mac's title-bar action. Opening a new tab stays the default. ([#1066](https://github.com/driceroland/Search/issues/1066))
+- Settings › Spaces & Pins can keep a pin in place when an address is typed, opening the result in a new tab. Off by default, and included in Set Up Like Arc. ([#1053](https://github.com/driceroland/Search/issues/1053))
 - ⌘S can make the column icons only instead of hiding it, so the tabs stay in sight; ⌘S again brings the titles back. Off unless you turn on Settings › Appearance › Tabs › ⌘S makes the column icons only. Not with the tabs across the top, nor with the column hidden until the pointer reaches the edge. Asked for by [@vincent-caetano](https://github.com/vincent-caetano) ([#1008](https://github.com/driceroland/Search/issues/1008)). Thanks [@Chahine-tech](https://github.com/Chahine-tech) ([#1015](https://github.com/driceroland/Search/pull/1015))
 
 ### Changed

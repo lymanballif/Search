@@ -169,6 +169,10 @@ enum SettingsIndex {
         .init(id: "tabs.reading", group: "tablook", icon: "text.line.first.and.arrowtriangle.forward",
               title: "Show how far you've read", detail: "The tab you're on fills with grey as you scroll down",
               keys: ["tabs.reading"], words: ["progress", "scroll"]),
+        .init(id: "tabs.doubleClick", group: "tablook", icon: "cursorarrow.click.2",
+              title: "Double-click beside the tabs", detail: "Open a new tab, or follow the Mac's title-bar setting",
+              more: "The empty space after or below the tabs. Title-bar action follows System Settings › Desktop & Dock, including Minimise and Do Nothing.",
+              keys: ["tabs.doubleClick"], words: ["double click", "title bar", "zoom", "minimise", "minimize", "window"]),
         .init(id: "tabs.give", group: "tablook", icon: "hand.point.up.left",
               title: "Tabs give when pressed", detail: "A tab sinks a little under the pointer, as in Arc",
               keys: ["tabs.give"], words: ["press", "animation", "bounce"]),
@@ -311,6 +315,9 @@ enum SettingsIndex {
               title: "Pins keep their site", detail: "Links elsewhere open over the pin, and ⌘W takes it back home",
               more: "As in Arc and Safari: a link from a pin to another site opens in a peek over it, and a pin closed with ⌘W, or left open when Search quits, comes back at the page it was pinned at.",
               keys: ["pins.home", "pins.peek"], words: ["pinned tabs", "go home", "reset pin"]),
+        .init(id: "pins.typedAside", group: "pins", icon: "arrow.up.forward.square",
+              title: "Typed addresses open in a new tab", detail: "Keep a pin on its page when you type another address",
+              keys: ["pins.typedAside"], words: ["pinned tabs", "address", "cmd l", "arc"]),
         .init(id: "pins.list", group: "pins", icon: "list.bullet.rectangle",
               title: "Pinned rows", detail: "Pins as rows under the squares, and Clear over the rest",
               more: "As in Arc: squares for the sites you live in, rows for pages you keep, and a line over the rest with Clear. Right-click a tab to pin it as a row.",
@@ -625,14 +632,15 @@ extension Preferences {
         var rows: Bool
         var keep: (home: Bool, peek: Bool)
         var floating: Bool
+        var typedAside: Bool
     }
 
     var arcSnapshot: ArcSetup {
-        ArcSetup(layout: tabsLayout, spaces: usesSpaces, rows: listsPins, keep: (pinsGoHome, pinsPeek), floating: floatingNewTab)
+        ArcSetup(layout: tabsLayout, spaces: usesSpaces, rows: listsPins, keep: (pinsGoHome, pinsPeek), floating: floatingNewTab, typedAside: pinsTypedAside)
     }
 
     var looksLikeArc: Bool {
-        tabsLayout == .left && usesSpaces && listsPins && pinsGoHome && pinsPeek && floatingNewTab
+        tabsLayout == .left && usesSpaces && listsPins && pinsGoHome && pinsPeek && floatingNewTab && pinsTypedAside
     }
 
     /// Turns Arc's way on and says what changed.
@@ -644,6 +652,7 @@ extension Preferences {
         if !listsPins { listsPins = true; changed.append("pinned rows") }
         if !(pinsGoHome && pinsPeek) { pinsKeepSite = true; changed.append("pins keep their site") }
         if !floatingNewTab { floatingNewTab = true; changed.append("the floating new tab") }
+        if !pinsTypedAside { pinsTypedAside = true; changed.append("typed addresses leave pins in place") }
         return changed
     }
 
@@ -654,6 +663,7 @@ extension Preferences {
         pinsGoHome = before.keep.home
         pinsPeek = before.keep.peek
         floatingNewTab = before.floating
+        pinsTypedAside = before.typedAside
     }
 }
 
@@ -665,6 +675,8 @@ extension SettingsIndex {
     @MainActor static func values(_ prefs: Preferences) -> [String: Any] {
         [
             "tabs.layout": prefs.tabsLayout.rawValue,
+            "tabs.doubleClick": prefs.tabDoubleClick.rawValue,
+            "pins.typedAside": prefs.pinsTypedAside,
             "tabs.sleep": prefs.sleepChoice.rawValue,
             "float.own": prefs.floatOwn.rawValue,
             "pins.keep": prefs.pinsKeepSite,
@@ -695,6 +707,12 @@ extension SettingsIndex {
         case "tabs.layout":
             guard let layout = (value as? String).flatMap(TabsLayout.init) else { return false }
             prefs.tabsLayout = layout
+        case "tabs.doubleClick":
+            guard let choice = (value as? String).flatMap(TabDoubleClick.init) else { return false }
+            prefs.tabDoubleClick = choice
+        case "pins.typedAside":
+            guard let on = value as? Bool else { return false }
+            prefs.pinsTypedAside = on
         case "tabs.sleep":
             guard let choice = (value as? String).flatMap(SleepChoice.init) else { return false }
             prefs.sleepChoice = choice

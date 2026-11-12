@@ -1084,6 +1084,11 @@ struct ContentView: View {
         held.window = window
         dress(window)
         if let tab = browser.active { WindowTitle.set(tab, in: window) }
+        if browser.inScene {
+            // After attachment and SwiftUI's initial ordering, restore the
+            // other profiles so their visible member can hide this window.
+            DispatchQueue.main.async { Browsers.restoreOnce() }
+        }
     }
 
     private func dress(_ window: NSWindow) {

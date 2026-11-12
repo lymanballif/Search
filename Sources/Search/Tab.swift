@@ -1599,6 +1599,11 @@ final class Tab: ObservableObject, Identifiable {
         }
     }
 
+    /// A switcher's cached picture belongs to this page's lifetime, even if
+    /// a pin is put down and opened again at exactly the same address.
+    var previewGeneration: UInt64 { loadGeneration }
+    var hasPreview: Bool { built != nil || picture != nil }
+
     /// A small picture of the page for the tab switcher. A sleeping tab's
     /// comes from the picture kept for waking it; a tab brought back from
     /// last time and not opened yet has none, rather than a page built for it.

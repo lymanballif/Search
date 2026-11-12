@@ -26,6 +26,8 @@ Checked here, with Settings › Profiles in one window on:
 - turned off, the tucked window comes out as a window of its own.
 """
 import sys
+import json
+import subprocess
 import threading
 import time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
@@ -179,6 +181,13 @@ def main():
 
         print("— a relaunch")
         sv.quit(); time.sleep(1)
+        saved = json.loads((Path(sv.SUPPORT) / "windows.json").read_text())
+        t.ok("the first saved member is tucked", saved[0].get("tucked") is True, saved)
+        # The global last-used space can be the visible profile's rather
+        # than the first record's. The scene must still restore that first
+        # record; otherwise two windows are made for the visible profile.
+        shown = next(record for record in saved if not record.get("tucked"))
+        subprocess.run(["defaults", "write", sv.SUITE, "space.current", shown["space"]], check=True)
         sv.launch()
         time.sleep(1)
         off_screen(t, "relaunch")

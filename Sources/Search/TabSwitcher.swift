@@ -61,7 +61,7 @@ final class TabSwitcher: ObservableObject {
     var moonsPerColumn: Int { moonColumns == 0 ? 0 : (moons.count + moonColumns - 1) / moonColumns }
     @Published private(set) var selectedID: Tab.ID?
     @Published private(set) var visible = false
-    @Published private var previews: [Tab.ID: (address: URL, image: NSImage)] = [:]
+    @Published private var previews: [Tab.ID: (address: URL, generation: UInt64, image: NSImage)] = [:]
 
     /// A pair's other page, by its first: the pair is one card, with both
     /// pages pictured side by side (see Browser.switchTabs).
@@ -334,15 +334,18 @@ final class TabSwitcher: ObservableObject {
         if previews.keys.contains(where: { !keep($0) }) { previews = previews.filter { keep($0.key) } }
     }
 
-    func preview(for id: Tab.ID, address: URL?) -> NSImage? {
-        guard let cached = previews[id], cached.address == address else { return nil }
+    func preview(for tab: Tab) -> NSImage? {
+        guard tab.hasPreview, let cached = previews[tab.id], cached.address == tab.address,
+              cached.generation == tab.previewGeneration else { return nil }
         return cached.image
     }
 
-    func cachePreview(_ image: NSImage, for id: Tab.ID, address: URL) {
+    func cachePreview(_ image: NSImage, for tab: Tab, generation: UInt64) {
+        guard tab.hasPreview, tab.previewGeneration == generation, let address = tab.address else { return }
+        let id = tab.id
         let shown = ring.contains(id) || candidates.contains { partners[$0] == id }
         guard kept(id) || (visible && shown) else { return }
-        previews[id] = (address, image)
+        previews[id] = (address, generation, image)
     }
 
     /// `tab`: a card's tab by its id, whether the row's or a small window's.
@@ -353,19 +356,20 @@ final class TabSwitcher: ObservableObject {
         let firsts = [selectedID].compactMap { $0 } + ring.filter { $0 != selectedID }
         let orderedIDs = firsts.flatMap { id in [id] + [partners[id]].compactMap { $0 } }
         let ordered = orderedIDs.compactMap(tab)
-            .filter { $0.id == current || preview(for: $0.id, address: $0.address) == nil }
+            .filter { $0.id == current || preview(for: $0) == nil }
         for (index, tab) in ordered.enumerated() {
             DispatchQueue.main.asyncAfter(deadline: .now() + Double(index) * 0.04) { [weak self, weak tab] in
                 guard let self, let tab, self.generation == token, self.visible else { return }
-                guard tab.id == current || self.preview(for: tab.id, address: tab.address) == nil else { return }
+                guard tab.id == current || self.preview(for: tab) == nil else { return }
                 self.requestPreview(of: tab, gesture: token)
             }
         }
     }
 
     private func requestPreview(of tab: Tab, gesture: UUID?) {
-        guard let address = tab.address else { return }
+        guard tab.hasPreview, let address = tab.address else { return }
         let id = tab.id
+        let pageGeneration = tab.previewGeneration
         let request = UUID()
         previewRequests[id] = request
         tab.preview(width: 180) { [weak self, weak tab] image in
@@ -374,7 +378,7 @@ final class TabSwitcher: ObservableObject {
             guard let tab, let image, tab.address == address,
                   gesture == nil || (self.generation == gesture && self.visible)
             else { return }
-            self.cachePreview(image, for: id, address: address)
+            self.cachePreview(image, for: tab, generation: pageGeneration)
         }
     }
 
@@ -568,7 +572,7 @@ struct TabSwitcherOverlay: View {
     private func picture(_ tab: Tab, width: CGFloat, height: CGFloat, mark: CGFloat = 26) -> some View {
         ZStack {
             Palette.hover
-            if let preview = switcher.preview(for: tab.id, address: tab.address) {
+            if let preview = switcher.preview(for: tab) {
                 Image(nsImage: preview)
                     .resizable()
                     .scaledToFill()

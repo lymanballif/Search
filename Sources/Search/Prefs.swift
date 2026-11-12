@@ -69,6 +69,20 @@ enum NewTabPlace: String {
     case next, top, end
 }
 
+/// Double-clicking empty tab space keeps opening a new tab unless asked
+/// to follow the Mac's title-bar action instead.
+enum TabDoubleClick: String, CaseIterable, Identifiable {
+    case newTab, titleBar
+
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .newTab: return "Opens a new tab"
+        case .titleBar: return "Title-bar action"
+        }
+    }
+}
+
 /// Where Downloads opens: a tab of its own, as it always has; the side
 /// panel's card floating by the downloads button; or the side panel,
 /// beside the page.
@@ -132,6 +146,9 @@ final class Preferences: ObservableObject {
     /// Titles down a side instead of across the top.
     @Published var sidebar: Bool {
         didSet { store.set(sidebar, forKey: "sidebar") }
+    }
+    @Published var tabDoubleClick: TabDoubleClick {
+        didSet { store.set(tabDoubleClick.rawValue, forKey: "tabs.doubleClick") }
     }
     /// The side panel's width, as you last left it (see SidePanel.swift).
     @Published var sidePanelWidth: CGFloat {
@@ -655,6 +672,11 @@ final class Preferences: ObservableObject {
     @Published var pinsGoHome: Bool {
         didSet { store.set(pinsGoHome, forKey: "pins.home") }
     }
+    /// Typed addresses leave a pin on its page and open a regular tab.
+    /// Separate from pins keeping their site: off unless asked for.
+    @Published var pinsTypedAside: Bool {
+        didSet { store.set(pinsTypedAside, forKey: "pins.typedAside") }
+    }
     /// A pin's ⌘ number pressed again, on that pin, goes back to the tab
     /// you were on before it.
     /// Always on since the Settings rework (Drice, 24 Oct 2026): it only
@@ -762,6 +784,7 @@ final class Preferences: ObservableObject {
                                  Preferences.sidePanelWidths.lowerBound), Preferences.sidePanelWidths.upperBound)
         sidebar = store.object(forKey: "sidebar") as? Bool
             ?? (store.string(forKey: "manner") == "side")
+        tabDoubleClick = store.string(forKey: "tabs.doubleClick").flatMap(TabDoubleClick.init) ?? .newTab
         sidePosition = store.string(forKey: "sidebar.position").flatMap(SidebarPosition.init) ?? .left
         sideHides = store.bool(forKey: "sidebar.hides")
         roomyTabs = store.bool(forKey: "sidebar.roomy")
@@ -867,6 +890,7 @@ final class Preferences: ObservableObject {
         let peek = store.object(forKey: "pins.peek") as? Bool
         let keepsSite = home == nil && peek == nil ? true : (home ?? false) || (peek ?? false)
         pinsGoHome = keepsSite
+        pinsTypedAside = store.bool(forKey: "pins.typedAside")
         ai = AI.shipped && store.bool(forKey: "ai")
         aiProvider = store.string(forKey: "ai.provider").flatMap(AIProvider.init(rawValue:))
         aiModels = store.dictionary(forKey: "ai.models") as? [String: String] ?? [:]
