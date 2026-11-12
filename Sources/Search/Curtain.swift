@@ -175,6 +175,29 @@ enum Veiling {
         return s;
       }
 
+      // Keep the position before revealing the element: removing display:none
+      // can itself move a page through scroll anchoring. Nested scrollers need
+      // their positions too, not just the window's.
+      var preview = null;
+      function endPreview(css, restoreScroll) {
+        if (!preview) return;
+        var old = preview;
+        preview = null;
+        sheet('office-veil').textContent = css == null ? old.css : css;
+        sheet('office-peek').textContent = '';
+        if (restoreScroll !== false) {
+          old.parents.forEach(function (p) {
+            if (p.node.isConnected) p.node.scrollTo({ left: p.x, top: p.y, behavior: 'instant' });
+          });
+          window.scrollTo({ left: old.x, top: old.y, behavior: 'instant' });
+        }
+      }
+      // A page coming back from the back/forward cache must not keep a hover.
+      // Same-document navigation keeps its new destination, not the old scroll.
+      window.addEventListener('pagehide', function () { endPreview(null, true); });
+      window.addEventListener('hashchange', function () { endPreview(null, false); });
+      window.addEventListener('popstate', function () { endPreview(null, false); });
+
       function chrome() {
         if (frame) return frame;
         frame = document.createElement('div');
@@ -361,18 +384,26 @@ enum Veiling {
         // fighting it with another rule, so the element comes back with the
         // layout it actually had.
         peek: function (css, sel) {
-          sheet('office-veil').textContent = css;
-          sheet('office-peek').textContent = sel +
-            ' { outline: 2px solid rgba(23,23,23,.9) !important; outline-offset: 2px !important; }';
+          endPreview(null, true);
           try {
             var el = document.querySelector(sel);
-            if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
-          } catch (e) {}
+            if (!el) return;
+            var parents = [];
+            for (var p = el.parentElement; p; p = p.parentElement) {
+              if (p !== document.scrollingElement) {
+                parents.push({ node: p, x: p.scrollLeft, y: p.scrollTop });
+              }
+            }
+            preview = { css: sheet('office-veil').textContent,
+                        x: window.scrollX, y: window.scrollY, parents: parents.reverse() };
+            sheet('office-veil').textContent = css;
+            sheet('office-peek').textContent = sel +
+              ' { outline: 2px solid rgba(23,23,23,.9) !important; outline-offset: 2px !important; }';
+            // No smooth scroll left running after the pointer leaves the row.
+            el.scrollIntoView({ block: 'center', behavior: 'instant' });
+          } catch (e) { endPreview(null, true); }
         },
-        unpeek: function (css) {
-          sheet('office-veil').textContent = css;
-          sheet('office-peek').textContent = '';
-        }
+        unpeek: function (css) { endPreview(css, true); }
       };
     })();
     """

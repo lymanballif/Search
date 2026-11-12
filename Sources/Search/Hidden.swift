@@ -22,6 +22,7 @@ struct HiddenPanel: View {
                                 Row(
                                     veil: veil,
                                     peek: { browser.peek(veil) },
+                                    stop: { browser.stopPeeking() },
                                     restore: { browser.restore(veil) }
                                 )
                             }
@@ -40,6 +41,7 @@ struct HiddenPanel: View {
                 Spacer()
             }
         }
+        .onDisappear { browser.stopPeeking() }
         // Leaving the panel puts the page back the way it was.
         .onHover { inside in
             if !inside { browser.stopPeeking() }
@@ -49,6 +51,7 @@ struct HiddenPanel: View {
     private struct Row: View {
         let veil: Veil
         let peek: () -> Void
+        let stop: () -> Void
         let restore: () -> Void
 
         @State private var hovering = false
@@ -79,7 +82,7 @@ struct HiddenPanel: View {
             .contentShape(Rectangle())
             .onHover { inside in
                 hovering = inside
-                if inside { peek() }
+                if inside { peek() } else { stop() }
             }
             .animation(Motion.quick, value: hovering)
         }

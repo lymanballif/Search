@@ -20,6 +20,19 @@ struct Keep: Codable, Identifiable, Equatable {
     var url: URL { URL(fileURLWithPath: path) }
     var stillThere: Bool { FileManager.default.fileExists(atPath: path) }
 
+    /// Only completed files can leave the Downloads list as files. Check
+    /// again when a drag starts: Finder may have moved it since the row drew.
+    var dragURL: URL? {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey]),
+              values.isRegularFile == true else { return nil }
+        return url
+    }
+
+    func dragProvider() -> NSItemProvider? {
+        guard let url = dragURL else { return nil }
+        return NSItemProvider(object: url as NSURL)
+    }
+
     /// The address as another app can fetch it. A blob: or data: one means
     /// nothing outside its page, and a data: one is the whole file again. A
     /// password in the address goes in neither the list's file nor the

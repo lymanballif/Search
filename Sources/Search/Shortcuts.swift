@@ -342,6 +342,23 @@ final class ShortcutStore: ObservableObject {
         Command.all.first { (changed[$0.id] != nil || $0.section == .spaces) && key(for: $0.id) == combo }
     }
 
+    /// Safari's other pair for stepping through tabs. A command moved or
+    /// turned off loses its alias too; an explicitly assigned key wins.
+    func tabNavigationAlias(on combo: KeyCombo) -> Command? {
+        let id: String
+        switch combo {
+        case KeyCombo("left", option: true): id = "tabs.previous"
+        case KeyCombo("right", option: true): id = "tabs.next"
+        default: return nil
+        }
+        guard !isChanged(id),
+              !Command.all.contains(where: { key(for: $0.id) == combo }),
+              !changed.contains(where: { $0.key.hasPrefix("ext:") && $0.value.key == combo }),
+              !manifest.contains(where: { changed[$0.key] == nil && $0.value.key == combo })
+        else { return nil }
+        return Command.named(id)
+    }
+
     /// A key an extension may not have: one of the Mac's, or one of
     /// Search's commands has as things stand.
     func keepsFromExtensions(_ combo: KeyCombo) -> Bool {

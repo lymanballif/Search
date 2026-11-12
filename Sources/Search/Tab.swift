@@ -349,7 +349,11 @@ final class Tab: ObservableObject, Identifiable {
     /// A tab with no view (asleep, restored) has only its address to say.
     var restAddress: URL? { built == nil ? address : committed }
 
+    /// Native links can replace the document without going through go(to:).
+    private(set) var documentRevision: UInt64 = 0
+
     func didCommit() {
+        documentRevision &+= 1
         popupGesture.clear()
         // What the old page was refused went with it.
         if !blockedPopups.isEmpty { blockedPopups = [] }
@@ -1405,7 +1409,7 @@ final class Tab: ObservableObject, Identifiable {
     }
 
     func unpeek(_ css: String) {
-        web.evaluateInSearch("window.__officeVeil && window.__officeVeil.unpeek(`\(escape(css))`)")
+        built?.evaluateInSearch("window.__officeVeil && window.__officeVeil.unpeek(`\(escape(css))`)")
     }
 
     private func escape(_ text: String) -> String {
@@ -2043,6 +2047,9 @@ final class Tab: ObservableObject, Identifiable {
         if !blockedPopups.isEmpty { blockedPopups = [] }
         translationGone(sleeping: true)
         watch = []
+        // Once the observers are gone, stopping the old view cannot tell
+        // the row its load ended. A pin put down mid-load must stop spinning.
+        loading = false
         ears.stop()
         noisy = false
         quiet?.invalidate()

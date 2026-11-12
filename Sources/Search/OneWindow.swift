@@ -240,15 +240,21 @@ extension Browser {
     /// Past this window's first space, the profile before's last; past its
     /// last, the next profile's first.
     func spaceBeyond(_ step: Int) -> UUID? {
-        guard let profile = profileBeyond(step) else { return nil }
-        let theirs = Spaces.read(profile: profile)
-        return step > 0 ? theirs.first?.id : theirs.last?.id
+        if let profile = profileBeyond(step) {
+            let theirs = Spaces.read(profile: profile)
+            return step > 0 ? theirs.first?.id : theirs.last?.id
+        }
+        guard prefs.wrapSpaceSwipes, !makingSpace else { return nil }
+        // A merged window circles all its profiles, not just the current
+        // profile. With one space, returning its id consumes the swipe
+        // without opening the card for a new space.
+        return step > 0 ? everySpace.first?.id : everySpace.last?.id
     }
 
     /// Whether a swipe draws the page after the one at `at`: a space of
     /// its own, or past the last the card for a new one — unless another
     /// profile's spaces come next.
     func drawsPage(after at: Int) -> Bool {
-        at < spaces.count && (at + 1 < spaces.count || makingSpace || profileBeyond(1) == nil)
+        at < spaces.count && (at + 1 < spaces.count || makingSpace || spaceBeyond(1) == nil)
     }
 }

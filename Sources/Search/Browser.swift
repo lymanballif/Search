@@ -73,6 +73,7 @@ final class Browser: NSObject, ObservableObject {
                 DispatchQueue.main.async { held.forEach { $0.present() } }
             }
             guard oldValue != activeID else { return }
+            stopPeeking()
             cameFrom = (oldValue, ProcessInfo.processInfo.systemUptime)
             // Going to another tab ends a page's run of links (see
             // placeForLink) — but with links opened in front beside their
@@ -733,6 +734,8 @@ final class Browser: NSObject, ObservableObject {
     @Published private(set) var veiling = false
     /// The tab doing the picking, which is not always the one in front.
     private weak var picking: Tab?
+    /// A hover belongs to its page even if the active tab changes.
+    private weak var hiddenPreviewTab: Tab?
     /// True while the list of what is hidden here is up.
     @Published var reviewing = false {
         didSet { if !reviewing { stopPeeking() } }
@@ -782,22 +785,28 @@ final class Browser: NSObject, ObservableObject {
     /// The pointer resting on a row in the list brings that one thing back,
     /// outlined, and scrolls the page to it.
     func peek(_ veil: Veil) {
+        stopPeeking()
         guard let tab = active else { return }
-        tab.peek(veil.selector, keeping: curtain.css(on: hereHost, without: veil.selector))
+        hiddenPreviewTab = tab
+        tab.peek(veil.selector, keeping: curtain.css(on: hereHost, without: veil.selector) + passingCSS(tab.id))
     }
 
     func stopPeeking() {
-        active?.unpeek(curtain.css(on: hereHost))
+        guard let tab = hiddenPreviewTab else { return }
+        hiddenPreviewTab = nil
+        tab.unpeek(curtain.css(on: curtain.host(of: tab.address)) + passingCSS(tab.id))
     }
 
     func restore(_ veil: Veil) {
         guard let host = hereHost else { return }
+        stopPeeking()
         curtain.restore(veil, on: host)
         redress()
     }
 
     func restoreAll() {
         guard let host = hereHost else { return }
+        stopPeeking()
         curtain.restoreAll(on: host)
         redress()
         reviewing = false
@@ -4831,24 +4840,61 @@ final class Browser: NSObject, ObservableObject {
     /// already in every window.
     func moveToWindow(_ tab: Tab, _ target: Browser?, at point: NSPoint? = nil) {
         guard target?.isPopup != true else { return }
-        guard tab.pin == nil, !tab.bench, target !== self, tabs.contains(where: { $0.id == tab.id }),
+        guard tab.pin == nil, !tab.bench, target !== self, tabs.contains(where: { $0 === tab }),
               target != nil || tabs.count > 1 || !tab.isBlank,
               // A window of another profile is another browser: never there.
               target.map({ $0.profileID == profileID }) ?? true
         else { return }
-        let destination = target ?? Browser(record: WindowRecord(space: spaceID))
-        detach(tab)
-        destination.receive(tab)
-        if target == nil {
-            // Dragged out: the new window where the tab was let go, its row
-            // under the hand.
-            let frame = point.map { p -> NSRect in
-                let size = window?.frame.size ?? NSSize(width: 1180, height: 780)
-                return NSRect(x: p.x - 120, y: p.y - size.height + 20, width: size.width, height: size.height)
+        let from = spaceID
+        let to = target?.spaceID
+        let store = target.map { Spaces.store(for: $0.spaceID) }
+        let generation = tab.previewGeneration
+        let document = tab.documentRevision
+        // The form check and the question both yield to the app. Neither
+        // answer can move a different page, or into a window that has since
+        // closed or changed spaces (and therefore sign-ins).
+        let valid: () -> Bool = { [weak self, weak tab, weak target] in
+            guard let self, let tab, !self.retired, !self.shut, self.spaceID == from,
+                  tab.pin == nil, !tab.bench, self.tabs.contains(where: { $0 === tab }),
+                  tab.previewGeneration == generation, tab.documentRevision == document else { return false }
+            if let to {
+                guard let target, !target.retired, !target.shut, !target.tucked, !target.isPopup,
+                      target.spaceID == to, target.profileID == self.profileID,
+                      Spaces.store(for: to) === store else { return false }
             }
-            Browsers.open(destination, frame: frame)
-        } else {
-            destination.window?.makeKeyAndOrderFront(nil)
+            return true
+        }
+        let complete: () -> Void = { [weak self, weak tab, weak target] in
+            guard valid(), let self, let tab else { return }
+            let destination = target ?? Browser(record: WindowRecord(space: from))
+            self.detach(tab)
+            destination.receive(tab)
+            if target == nil {
+                // Dragged out: the new window where the tab was let go, its
+                // row under the hand.
+                let frame = point.map { p -> NSRect in
+                    let size = self.window?.frame.size ?? NSSize(width: 1180, height: 780)
+                    return NSRect(x: p.x - 120, y: p.y - size.height + 20, width: size.width, height: size.height)
+                }
+                Browsers.open(destination, frame: frame)
+            } else {
+                destination.window?.makeKeyAndOrderFront(nil)
+            }
+        }
+        guard let target, !tab.shy, tab.store !== store else {
+            complete()
+            return
+        }
+        let name = target.spaces.first(where: { $0.id == to })?.name ?? "the other window"
+        tab.unsaved { unsaved in
+            guard valid() else { return }
+            if unsaved {
+                Ask.sure("Move Tab?",
+                         detail: "This page has unsaved form entries. It will reopen in “\(name)” with that Space’s sign-ins, so the entries may be lost.",
+                         confirm: "Move", then: complete)
+            } else {
+                complete()
+            }
         }
     }
 
