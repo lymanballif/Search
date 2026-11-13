@@ -181,6 +181,11 @@ final class TabCloseTests: XCTestCase {
     }
 
     func testTabMovedToAnotherWindowIsNotGoneBackTo() {
+        // The row-only setup retires its browser with closeAll(). Moving a
+        // tab requires a live source window, including after a draft check.
+        browser = Browser(record: WindowRecord(space: browser.spaceID))
+        for tab in browser.tabs + browser.parkedTabs { tab.close() }
+        browser.showRow([], active: nil)
         let other = Browser(record: WindowRecord(space: browser.spaceID))
         defer { other.closeAll() }
         let (a, b, c) = viewedBAC()

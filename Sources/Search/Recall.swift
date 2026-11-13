@@ -525,8 +525,23 @@ struct DownloadsPanel: View {
             .contentShape(Rectangle())
             .contextMenu { if let address = keep.address { CopyAddress(address: address) } }
             .onTapGesture { if keep.stillThere { open() } }
+            .modifier(DownloadFileDrag(keep: keep))
             .onHover { hovering = $0 }
             .animation(Motion.quick, value: hovering)
+        }
+    }
+
+    /// Both the full Downloads page and the compact panel use KeptRow.
+    /// Current downloads never get a file drag, nor does a missing file.
+    private struct DownloadFileDrag: ViewModifier {
+        let keep: Keep
+
+        @ViewBuilder func body(content: Content) -> some View {
+            if keep.dragURL != nil {
+                content.onDrag { keep.dragProvider() ?? NSItemProvider() }
+            } else {
+                content
+            }
         }
     }
 

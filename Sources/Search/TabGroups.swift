@@ -261,6 +261,8 @@ private struct GroupHeadingShared: ViewModifier {
             .contextMenu {
                 Button("Rename Group") { browser.editingGroupID = group.id }
                 Button(group.collapsed ? "Expand Group" : "Collapse Group") { browser.toggleTabGroup(group.id) }
+                Button("Save Group as Bookmark Folder") { browser.bookmarkTabGroup(group.id) }
+                    .disabled(browser.bookmarksInTabGroup(group.id).isEmpty)
                 // The whole group into another space, still a group there: Arc's
                 // folders came in wherever Arc had them.
                 if browser.prefs.usesSpaces, browser.spaces.count > 1 {
@@ -278,5 +280,37 @@ private struct GroupHeadingShared: ViewModifier {
                 Button("Ungroup Tabs") { browser.removeTabGroup(group.id) }
                 Button("Close Group") { browser.closeTabGroup(group.id) }
             }
+    }
+}
+
+extension Browser {
+    /// Save what the group shows, in its order, without opening sleeping
+    /// pages. Private pages and addresses that won't survive this session
+    /// must not end up in the bookmark file.
+    func bookmarksInTabGroup(_ id: UUID) -> [Bookmark] {
+        guard tabGroups.contains(where: { $0.id == id }) else { return [] }
+        return tabs(in: id).compactMap { tab in
+            guard !tab.shy, !tab.bench, let url = tab.address,
+                  let scheme = url.scheme?.lowercased(),
+                  ["http", "https", "file"].contains(scheme),
+                  scheme == "file" || url.host()?.isEmpty == false,
+                  var parts = URLComponents(url: url, resolvingAgainstBaseURL: false)
+            else { return nil }
+            parts.user = nil
+            parts.password = nil
+            guard let address = parts.url else { return nil }
+            let title = tab.name.flatMap { $0.isEmpty ? nil : $0 } ?? tab.title
+            return Bookmark.site(title, address)
+        }
+    }
+
+    @discardableResult
+    func bookmarkTabGroup(_ id: UUID) -> Bookmark? {
+        guard let group = tabGroups.first(where: { $0.id == id }) else { return nil }
+        let children = bookmarksInTabGroup(id)
+        guard !children.isEmpty else { return nil }
+        let folder = bookmarks.insert(.folder(group.name, children), into: nil)
+        announce("Group saved to Bookmarks")
+        return folder
     }
 }

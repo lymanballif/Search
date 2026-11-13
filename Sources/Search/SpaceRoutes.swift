@@ -5,8 +5,8 @@ import SwiftUI
 // After @AdityaAmitK's #596 and #722, made smaller.
 //
 // Off unless turned on in Settings › Spaces & Pins, and only with spaces on.
-// A rule is a site, its subdomains with it, and a space; the most specific
-// site wins. It sends:
+// A rule is a site, its subdomains with it, an optional path, and a space.
+// The most specific site wins, then its longest matching path. It sends:
 //
 // - a link from another app (Search as the Mac's browser);
 // - a link a page opens in a new tab — a target="_blank" click, ⌘-click,
@@ -22,29 +22,88 @@ import SwiftUI
 struct SpaceRoute: Equatable, Identifiable {
     /// A host, lowercased, without www.: "notion.so".
     var site: String
+    /// An optional, case-sensitive path prefix, ending on a path boundary.
+    /// Nil keeps the original rule for the whole site and its subdomains.
+    var path: String?
     var space: UUID
-    var id: String { site }
+    var id: String { site + (path ?? "") }
 
     /// As it is kept in the settings: a plain dictionary, readable with
     /// `defaults read`.
-    var plist: [String: String] { ["site": site, "space": space.uuidString] }
+    var plist: [String: String] {
+        var values = ["site": site, "space": space.uuidString]
+        if let path { values["path"] = path }
+        return values
+    }
 
-    init(site: String, space: UUID) {
+    init(site: String, space: UUID, path: String? = nil) {
         self.site = site
         self.space = space
+        self.path = path
     }
 
     init?(plist: Any) {
         guard let entry = plist as? [String: String],
               let site = entry["site"].flatMap(SpaceRoutes.site), let space = entry["space"].flatMap(UUID.init)
         else { return nil }
-        self.init(site: site, space: space)
+        if let path = entry["path"] {
+            guard path.hasPrefix("/"), !path.contains("?"), !path.contains("#"),
+                  let url = URL(string: "https://route.invalid" + path) else { return nil }
+            self.init(site: site, space: space, path: SpaceRoutes.path(of: url))
+        } else {
+            self.init(site: site, space: space)
+        }
     }
 }
 
 enum SpaceRoutes {
     static let key = "spaces.links"
     static let rulesKey = "spaces.links.rules"
+    private static let escapes = try! NSRegularExpression(pattern: "%[0-9a-fA-F]{2}")
+
+    /// A site or a URL entered in Settings. Unlike site(_:), keep its path;
+    /// query strings and fragments never decide which space gets a link.
+    static func route(_ typed: String, to space: UUID) -> SpaceRoute? {
+        var text = typed.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.hasPrefix("*.") { text.removeFirst(2) }
+        if !text.contains("://") {
+            // Tab menus hand us an already-normalized IPv6 host without
+            // brackets; add them back before treating it as a URL.
+            if !text.contains("/"), !text.hasPrefix("["), text.filter({ $0 == ":" }).count > 1 {
+                text = "[" + text + "]"
+            }
+            text = "https://" + text
+        }
+        guard let url = URL(string: text), let site = site(of: url),
+              url.user == nil, url.password == nil else { return nil }
+        return SpaceRoute(site: site, space: space, path: path(of: url))
+    }
+
+    static func path(of url: URL) -> String? {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return nil }
+        var path = components.percentEncodedPath
+        // Escape spelling is insensitive to hex case, while path text is
+        // not. Keep encoded slashes encoded so they cannot invent segments.
+        let original = path as NSString
+        for match in escapes.matches(in: path, range: NSRange(location: 0, length: original.length)) {
+            let escape = original.substring(with: match.range)
+            path = path.replacingOccurrences(of: escape, with: escape.uppercased())
+        }
+        // Web addresses treat escaped dots as dot segments too. Resolve
+        // them before choosing a space, without decoding an escaped slash
+        // or a dot that is part of an ordinary filename.
+        path = path.split(separator: "/", omittingEmptySubsequences: false).map { segment in
+            let dots = segment.replacingOccurrences(of: "%2E", with: ".")
+            return dots == "." || dots == ".." ? dots : String(segment)
+        }.joined(separator: "/")
+        components.percentEncodedPath = path
+        if let resolved = components.url?.standardized,
+           let normalized = URLComponents(url: resolved, resolvingAgainstBaseURL: false) {
+            path = normalized.percentEncodedPath
+        }
+        while path.hasSuffix("/") { path.removeLast() }
+        return path.isEmpty ? nil : path
+    }
 
     // MARK: - sites
 
@@ -55,8 +114,13 @@ enum SpaceRoutes {
         var text = typed.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if text.hasPrefix("*.") { text.removeFirst(2) }
         guard !text.isEmpty else { return nil }
+        if !text.contains("://"), !text.contains("/"), !text.hasPrefix("["), text.filter({ $0 == ":" }).count > 1 {
+            text = "[" + text + "]"
+        }
         if !text.contains("://") { text = "https://" + text }
-        guard let host = URLComponents(string: text)?.host else { return nil }
+        // URL.host uses the same ASCII spelling as site(of:), including
+        // international domain names restored from an older settings file.
+        guard let host = URL(string: text)?.host else { return nil }
         return clean(host)
     }
 
@@ -88,9 +152,52 @@ enum SpaceRoutes {
     /// of it, the longest such site when more than one is.
     static func match(_ url: URL, in routes: [SpaceRoute]) -> SpaceRoute? {
         guard let host = site(of: url) else { return nil }
+        let path = path(of: url) ?? ""
         return routes
             .filter { host == $0.site || (!host.contains(":") && host.hasSuffix("." + $0.site)) }
-            .max { $0.site.count < $1.site.count }
+            .filter { route in
+                guard let prefix = route.path else { return true }
+                return path == prefix || path.hasPrefix(prefix + "/")
+            }
+            .max {
+                if $0.site.count != $1.site.count { return $0.site.count < $1.site.count }
+                return ($0.path?.count ?? 0) < ($1.path?.count ?? 0)
+            }
+    }
+
+    enum TabMenuAction: Equatable {
+        case remove(SpaceRoute, destination: String?)
+        case set(site: String, space: Space)
+
+        var title: String {
+            switch self {
+            case let .remove(route, destination):
+                // A broader rule may still apply after this one is removed.
+                // Name the rule, rather than promise that routing will stop.
+                return "Remove Rule: \(route.id)" + (destination.map { " → \($0)" } ?? " (space removed)")
+            case let .set(site, space):
+                return "Always Open \(site) in \(space.name)"
+            }
+        }
+
+        @MainActor func run() {
+            switch self {
+            case let .remove(route, _): SpaceRoutes.remove(route.id)
+            case let .set(site, space): SpaceRoutes.set(site, to: space.id)
+            }
+        }
+    }
+
+    /// The tab can be in a different space from the rule's destination.
+    /// Offer the rule that actually matches, including a parent domain or
+    /// path, and keep whole-site creation for a page with no matching rule.
+    static func tabMenuAction(for url: URL, routes: [SpaceRoute], current: Space,
+                              spaces: [UUID: Space]) -> TabMenuAction? {
+        guard let site = site(of: url) else { return nil }
+        if let route = match(url, in: routes) {
+            return .remove(route, destination: spaces[route.space]?.name)
+        }
+        return .set(site: site, space: current)
     }
 
     /// The space a rule sends an address to: only while the setting and
@@ -106,19 +213,20 @@ enum SpaceRoutes {
                      spaces: Spaces.known)
     }
 
-    /// One site to one space, in place of any rule the site had.
+    /// One site/path to one space, leaving other paths of that site intact.
     @MainActor static func set(_ site: String, to space: UUID) {
+        guard let route = route(site, to: space) else { return }
         var routes = Shared.prefs.spaceRoutes
-        if let at = routes.firstIndex(where: { $0.site == site }) {
-            routes[at].space = space
+        if let at = routes.firstIndex(where: { $0.id == route.id }) {
+            routes[at] = route
         } else {
-            routes.append(SpaceRoute(site: site, space: space))
+            routes.append(route)
         }
         Shared.prefs.spaceRoutes = routes
     }
 
-    @MainActor static func remove(_ site: String) {
-        Shared.prefs.spaceRoutes.removeAll { $0.site == site }
+    @MainActor static func remove(_ id: String) {
+        Shared.prefs.spaceRoutes.removeAll { $0.id == id }
     }
 
     // MARK: - windows
@@ -177,16 +285,17 @@ struct SpaceRouteList: View {
 
     var body: some View {
         let choices = SpaceRoutes.choices
+        let canAdd = SpaceRoutes.route(typed, to: chosen ?? choices.first?.id ?? Space.firstID) != nil
         ForEach(prefs.spaceRoutes) { route in
             Rule()
-            Line(route.site, choices.first { $0.id == route.space }.map { "Opens in \($0.name)" }
+            Line(route.id, choices.first { $0.id == route.space }.map { "Opens in \($0.name)" }
                  ?? "Its space is gone, so links open as usual") {
-                Pill("Remove") { SpaceRoutes.remove(route.site) }
+                Pill("Remove") { SpaceRoutes.remove(route.id) }
             }
         }
         Rule()
         HStack(spacing: 10) {
-            TextField("notion.so", text: $typed)
+            TextField("notion.so or notion.so/work", text: $typed)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5))
                 .foregroundStyle(Palette.ink)
@@ -201,16 +310,17 @@ struct SpaceRouteList: View {
             .pickerStyle(.menu)
             .fixedSize()
             Pill("Add", action: add)
-                .disabled(SpaceRoutes.site(typed) == nil)
-                .opacity(SpaceRoutes.site(typed) == nil ? 0.5 : 1)
+                .disabled(!canAdd)
+                .opacity(canAdd ? 1 : 0.5)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 9)
     }
 
     private func add() {
-        guard let site = SpaceRoutes.site(typed), let space = chosen ?? SpaceRoutes.choices.first?.id else { return }
-        SpaceRoutes.set(site, to: space)
+        guard let space = chosen ?? SpaceRoutes.choices.first?.id,
+              SpaceRoutes.route(typed, to: space) != nil else { return }
+        SpaceRoutes.set(typed, to: space)
         typed = ""
     }
 }

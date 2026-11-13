@@ -385,7 +385,8 @@ struct SettingsPanel: View {
         if found.isEmpty {
             Card { Nothing("No setting called that. Try other words, like dark, tabs or video") }
         }
-        let byGroup = Dictionary(grouping: found, by: \.group)
+        let split = SettingsIndex.splitResults(found)
+        let byGroup = Dictionary(grouping: split.settings, by: \.group)
         ForEach(SettingsIndex.groups.filter { byGroup[$0.id] != nil }) { group in
             VStack(alignment: .leading, spacing: 8) {
                 Button {
@@ -409,6 +410,11 @@ struct SettingsPanel: View {
                 .buttonStyle(.plain)
                 .help("Open \(group.page.title) at \(group.title)")
                 Card { rows(byGroup[group.id] ?? [], searched: true) }
+            }
+        }
+        if !split.information.isEmpty {
+            GroupBlock(title: "Always available", icon: "info.circle") {
+                Card { rows(split.information, searched: true) }
             }
         }
     }
@@ -530,6 +536,9 @@ struct SettingsPanel: View {
                 set: { on in withAnimation(Motion.glide) { prefs.roomyTabs = on } }
             ))
         case "sidebar.player": Switch(on: $prefs.showsPlayer)
+        case "sidebar.extensions": Switch(on: $prefs.showsSidebarExtensions)
+        case "sidebar.bookmarks": Switch(on: $prefs.showsSidebarBookmarks)
+        case "sidebar.profiles": Switch(on: $prefs.showsSidebarProfiles)
         case "glyph": Segmented(options: Glyph.allCases.map { ($0, $0.title) }, selection: $prefs.glyph)
         case "tabs.reading": Switch(on: $prefs.showsReading)
         case "tabs.doubleClick":
@@ -675,6 +684,7 @@ struct SettingsPanel: View {
                 .disabled(!arcHere)
                 .opacity(arcHere ? 1 : 0.4)
         case "spaces": Switch(on: $prefs.usesSpaces)
+        case "spaces.swipeWrap": Switch(on: $prefs.wrapSpaceSwipes)
         case "profiles": Pill("New Profile…") { ProfileMenu.askNew() }
         case "profiles.oneWindow": Switch(on: $prefs.profilesInOneWindow)
         case "spaces.links": Switch(on: $prefs.sendsLinksToSpaces)

@@ -759,17 +759,12 @@ struct ContentView: View {
         if browser.reviewing {
             // No dimming for this one: the whole point is to keep looking at
             // the page while the list offers to put things back on it.
-            ZStack(alignment: .topTrailing) {
-                Color.clear
-                    .contentShape(Rectangle())
-                    .onTapGesture { browser.reviewing = false }
-                HiddenPanel(browser: browser)
-                    .padding(.top, Metrics.strip + 8)
-                    .padding(.trailing, 14)
-                    .transition(.scale(scale: 0.97, anchor: .topTrailing).combined(with: .opacity))
-            }
-            .ignoresSafeArea()
-            .transition(.opacity)
+            HiddenPanel(browser: browser)
+                .padding(.top, Metrics.strip + 8)
+                .padding(.trailing, 14)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                .ignoresSafeArea()
+                .transition(.opacity)
         }
     }
 
@@ -1561,6 +1556,12 @@ struct ContentView: View {
                 return true
             }
             if ShortcutStore.shared.isFreed(combo) { return false }
+        }
+
+        if let combo = KeyCombo(event: event),
+           let command = ShortcutStore.shared.tabNavigationAlias(on: combo) {
+            command.run(browser)
+            return true
         }
 
         // A shortcut an extension registered — ⌥⇧D, ⌃⇧Y — before ours, since

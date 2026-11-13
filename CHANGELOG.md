@@ -13,6 +13,10 @@ in [ROADMAP.md](ROADMAP.md).
 
 ### Fixed
 
+- A tab's menu recognizes the matching path rule for Send links to a space and removes that exact rule, leaving other paths and whole-site rules intact.
+- Putting down a pin before its page finishes loading stops its spinner.
+- The hidden-elements list leaves the page scrollable, closes on an outside click, and returns the page and its nested scrollers to their previous positions after a preview.
+- Moving a tab to a window with different space sign-ins asks before discarding unsaved form entries. A canceled move keeps the original page.
 - A completed address keeps the site and what you typed in view, instead of scrolling to the end of a long URL. Completion selection also counts Unicode correctly. ([#1055](https://github.com/driceroland/Search/issues/1055))
 - A pin put down no longer keeps a stale page picture in the tab switcher or an active minus button in its row. Closing it again leaves the selected page alone. ([#1050](https://github.com/driceroland/Search/issues/1050))
 - With Profiles in one window on, restoring the visible profile waits for the first native window and uses its saved space, so a tucked profile does not come back as a separate empty window. ([#1060](https://github.com/driceroland/Search/issues/1060))
@@ -33,6 +37,13 @@ in [ROADMAP.md](ROADMAP.md).
 
 ### Added
 
+- Settings search puts always-available features in their own section, apart from settings you can change.
+- Finished downloads can be dragged from Downloads to Finder or another app, while the file is still there. ([#920](https://github.com/driceroland/Search/issues/920))
+- Choose whether the sidebar shows extensions, bookmarks and the profile mark in Settings › Appearance. All remain visible until changed.
+- An option in Settings › Spaces & Pins makes swiping past either end of the spaces wrap to the other end, including profiles shown in one window.
+- Send links to a space can match a URL path as well as its site, so different parts of one site can open in different spaces.
+- Save Group as Bookmark Folder in a tab group's menu keeps its pages in order without closing them. Private pages are left out.
+- ⌥⌘← and ⌥⌘→ also go to the previous and next tab while those commands use their default shortcuts. Custom bindings and extension shortcuts keep priority. ([idea 293](https://officecommun.com/search/roadmap#idea-293))
 - Settings › Appearance › Tabs can make a double-click beside the tabs follow the Mac's title-bar action. Opening a new tab stays the default. ([#1066](https://github.com/driceroland/Search/issues/1066))
 - Settings › Spaces & Pins can keep a pin in place when an address is typed, opening the result in a new tab. Off by default, and included in Set Up Like Arc. ([#1053](https://github.com/driceroland/Search/issues/1053))
 - ⌘S can make the column icons only instead of hiding it, so the tabs stay in sight; ⌘S again brings the titles back. Off unless you turn on Settings › Appearance › Tabs › ⌘S makes the column icons only. Not with the tabs across the top, nor with the column hidden until the pointer reaches the edge. Asked for by [@vincent-caetano](https://github.com/vincent-caetano) ([#1008](https://github.com/driceroland/Search/issues/1008)). Thanks [@Chahine-tech](https://github.com/Chahine-tech) ([#1015](https://github.com/driceroland/Search/pull/1015))

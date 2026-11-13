@@ -920,7 +920,8 @@ struct SideBar: View {
     /// The foot's door and its margin beneath; with icons only, its doors
     /// one above the other.
     private var footHeight: CGFloat {
-        icons ? CGFloat(SideFoot.doors(prefs, browser.fetches, hanging: browser.downloadsHanging)) * 28 + 8 : 26 + 10
+        let doors = SideFoot.doors(prefs, browser.fetches, hanging: browser.downloadsHanging)
+        return doors == 0 ? 0 : icons ? CGFloat(doors) * 28 + 8 : 26 + 10
     }
     /// Between what plays in another tab and the foot's doors.
     private static let playerGap: CGFloat = 4
@@ -937,7 +938,7 @@ struct SideBar: View {
         }
     }
 
-    /// One small door at the bottom: the settings.
+    /// The buttons kept at the bottom of the column.
     private var foot: some View {
         SideFoot(browser: browser, prefs: prefs, fetches: browser.fetches, vertical: icons, width: width)
     }
@@ -946,10 +947,10 @@ struct SideBar: View {
 
 /// The row at the bottom of the column. Never wider than the column: wider,
 /// the column took its width, and centred in its own frame it slid half the
-/// overflow off each side (#535). The space's door, the puzzle, bookmarks and
-/// downloads stay put; the pinned extensions that don't fit give way, from
-/// the last, and are still in the puzzle's list.
-private struct SideFoot: View {
+/// overflow off each side (#535). The buttons left on stay put; the pinned
+/// extensions that don't fit give way, from the last, and are still in the
+/// puzzle's list.
+struct SideFoot: View {
     @ObservedObject var browser: Browser
     @ObservedObject var prefs: Preferences
     @ObservedObject var fetches: Fetches
@@ -960,22 +961,32 @@ private struct SideFoot: View {
     let width: CGFloat
 
     var body: some View {
-        if vertical {
+        if Self.doors(prefs, fetches, hanging: browser.downloadsHanging) == 0 {
+            EmptyView()
+        } else if vertical {
             VStack(spacing: 2) {
                 FetchDoor(browser: browser, fetches: fetches, arrowEdge: prefs.sidePosition == .right ? .leading : .trailing)
-                ExtensionSlot(browser: browser, edge: prefs.sidePosition == .right ? .leading : .trailing, room: 0)
-                BookmarkDoor(browser: browser, arrowEdge: prefs.sidePosition == .right ? .leading : .trailing)
+                if prefs.showsSidebarExtensions {
+                    ExtensionSlot(browser: browser, edge: prefs.sidePosition == .right ? .leading : .trailing, room: 0)
+                }
+                if prefs.showsSidebarBookmarks {
+                    BookmarkDoor(browser: browser, arrowEdge: prefs.sidePosition == .right ? .leading : .trailing)
+                }
                 if prefs.usesSpaces { SpaceDot(browser: browser) }
-                if Profiles.shared.several { ProfileBadge(browser: browser) }
+                if prefs.showsSidebarProfiles && Profiles.shared.several { ProfileBadge(browser: browser) }
             }
             .frame(maxWidth: .infinity)
             .padding(.bottom, 8)
         } else {
             HStack(spacing: 2) {
-                if Profiles.shared.several { ProfileBadge(browser: browser) }
+                if prefs.showsSidebarProfiles && Profiles.shared.several { ProfileBadge(browser: browser) }
                 if prefs.usesSpaces { SpaceDot(browser: browser) }
-                ExtensionSlot(browser: browser, edge: .trailing, room: room)
-                BookmarkDoor(browser: browser, arrowEdge: .trailing)
+                if prefs.showsSidebarExtensions {
+                    ExtensionSlot(browser: browser, edge: .trailing, room: room)
+                }
+                if prefs.showsSidebarBookmarks {
+                    BookmarkDoor(browser: browser, arrowEdge: .trailing)
+                }
                 // Only while a download is running, and a moment after.
                 FetchDoor(browser: browser, fetches: fetches, arrowEdge: prefs.sidePosition == .right ? .leading : .trailing)
                 Spacer(minLength: 0)
@@ -987,10 +998,17 @@ private struct SideFoot: View {
 
     /// How many doors the foot has, stacked: what the rows stop short of.
     @MainActor static func doors(_ prefs: Preferences, _ fetches: Fetches, hanging: Bool = false) -> Int {
-        var kept = 2  // the puzzle and bookmarks
+        doorCount(prefs, severalProfiles: Profiles.shared.several,
+                  downloads: FetchDoor.shows(fetches, prefs, hanging: hanging))
+    }
+
+    /// Both the stacked height and the pinned-extension room use the same
+    /// count, so hiding a button gives its space back in either layout.
+    @MainActor static func doorCount(_ prefs: Preferences, severalProfiles: Bool, downloads: Bool) -> Int {
+        var kept = (prefs.showsSidebarExtensions ? 1 : 0) + (prefs.showsSidebarBookmarks ? 1 : 0)
         if prefs.usesSpaces { kept += 1 }
-        if Profiles.shared.several { kept += 1 }
-        if FetchDoor.shows(fetches, prefs, hanging: hanging) { kept += 1 }
+        if prefs.showsSidebarProfiles && severalProfiles { kept += 1 }
+        if downloads { kept += 1 }
         return kept
     }
 
@@ -998,10 +1016,7 @@ private struct SideFoot: View {
     /// is 26 points, with 2 between them.
     private var room: Int {
         let door: CGFloat = 26 + 2
-        var kept = 2  // the puzzle and bookmarks
-        if prefs.usesSpaces { kept += 1 }
-        if Profiles.shared.several { kept += 1 }
-        if FetchDoor.shows(fetches, prefs, hanging: browser.downloadsHanging) { kept += 1 }
+        let kept = Self.doors(prefs, fetches, hanging: browser.downloadsHanging)
         let free = width - 2 * 10 + 2 - CGFloat(kept) * door
         return max(0, Int((free / door).rounded(.down)))
     }

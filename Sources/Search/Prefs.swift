@@ -198,6 +198,16 @@ final class Preferences: ObservableObject {
     @Published var showsPlayer: Bool {
         didSet { store.set(showsPlayer, forKey: "sidebar.player") }
     }
+    /// Only the column's buttons; menus and Settings remain available.
+    @Published var showsSidebarExtensions: Bool {
+        didSet { store.set(showsSidebarExtensions, forKey: "sidebar.extensions") }
+    }
+    @Published var showsSidebarBookmarks: Bool {
+        didSet { store.set(showsSidebarBookmarks, forKey: "sidebar.bookmarks") }
+    }
+    @Published var showsSidebarProfiles: Bool {
+        didSet { store.set(showsSidebarProfiles, forKey: "sidebar.profiles") }
+    }
     /// One tab's line in the column, and the size its title is set in.
     var sideRow: CGFloat { iconColumn ? Metrics.iconTile : roomyTabs ? 36 : 28 }
     var sideTitle: CGFloat { roomyTabs ? 14 : 12.5 }
@@ -645,6 +655,10 @@ final class Preferences: ObservableObject {
     @Published var usesSpaces: Bool {
         didSet { store.set(usesSpaces, forKey: "spaces") }
     }
+    /// Swiping past either end returns to the other end, if asked for.
+    @Published var wrapSpaceSwipes: Bool {
+        didSet { store.set(wrapSpaceSwipes, forKey: "spaces.swipeWrap") }
+    }
     /// Profiles in one window (see OneWindow.swift): a space of another
     /// profile, chosen, brings that profile's window into this one's place.
     /// Off unless asked for; turned off, the windows tucked away come out.
@@ -791,6 +805,9 @@ final class Preferences: ObservableObject {
         sideIcons = store.bool(forKey: "sidebar.icons")
         foldsToIcons = store.bool(forKey: "sidebar.foldIcons")
         showsPlayer = store.bool(forKey: "sidebar.player")
+        showsSidebarExtensions = store.object(forKey: "sidebar.extensions") as? Bool ?? true
+        showsSidebarBookmarks = store.object(forKey: "sidebar.bookmarks") as? Bool ?? true
+        showsSidebarProfiles = store.object(forKey: "sidebar.profiles") as? Bool ?? true
         let width = store.object(forKey: "sidebar.width") as? Double ?? Double(Metrics.side)
         sideWidth = min(Metrics.sideMax, max(Metrics.sideMin, CGFloat(width)))
         cards = store.object(forKey: "layout.cards") as? Bool ?? true
@@ -880,6 +897,7 @@ final class Preferences: ObservableObject {
         // existed; they are not asked to sit through it.
         welcomed = store.bool(forKey: "welcomed") || store.object(forKey: "glyph") != nil
         usesSpaces = store.bool(forKey: "spaces")
+        wrapSpaceSwipes = store.bool(forKey: "spaces.swipeWrap")
         profilesInOneWindow = store.bool(forKey: "profiles.oneWindow")
         listsPins = store.bool(forKey: "pins.list")
         // "Pins keep their site" is one switch over two keys (see
@@ -1006,6 +1024,9 @@ final class Preferences: ObservableObject {
              or: .left)
         take(\.sideHides, store.bool(forKey: "sidebar.hides"))
         take(\.roomyTabs, store.bool(forKey: "sidebar.roomy"))
+        take(\.showsSidebarExtensions, "sidebar.extensions", store.object(forKey: "sidebar.extensions") as? Bool, or: true)
+        take(\.showsSidebarBookmarks, "sidebar.bookmarks", store.object(forKey: "sidebar.bookmarks") as? Bool, or: true)
+        take(\.showsSidebarProfiles, "sidebar.profiles", store.object(forKey: "sidebar.profiles") as? Bool, or: true)
         take(\.sideIcons, store.bool(forKey: "sidebar.icons"))
         take(\.foldsToIcons, store.bool(forKey: "sidebar.foldIcons"))
         take(\.sideWidth, "sidebar.width", (store.object(forKey: "sidebar.width") as? Double).map { CGFloat($0) }

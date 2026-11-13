@@ -74,6 +74,84 @@ final class SpaceRoutesTests: XCTestCase {
         XCTAssertNil(SpaceRoute(plist: "figma.com"))
     }
 
+    func testPathInputKeepsCaseAndDropsQueryAndFragment() throws {
+        let route = try XCTUnwrap(SpaceRoutes.route(" https://www.Notion.so/Team/Project/?view=board#top ", to: work.id))
+        XCTAssertEqual(route.site, "notion.so")
+        XCTAssertEqual(route.path, "/Team/Project")
+        XCTAssertEqual(route.id, "notion.so/Team/Project")
+        XCTAssertEqual(SpaceRoutes.route("notion.so/", to: work.id)?.path, nil)
+        XCTAssertEqual(SpaceRoutes.route("notion.so/a/../work", to: work.id)?.path, "/work")
+        XCTAssertEqual(SpaceRoutes.route("::1", to: work.id)?.site, "::1")
+        XCTAssertNil(SpaceRoutes.route("file:///tmp/work", to: work.id))
+        XCTAssertNil(SpaceRoutes.route("https://user:password@notion.so/work", to: work.id))
+    }
+
+    func testPathRulesMatchWholeSegmentsAndMostSpecificPrefix() throws {
+        let whole = SpaceRoute(site: "example.com", space: home.id)
+        let workRoute = try XCTUnwrap(SpaceRoutes.route("example.com/Work", to: work.id))
+        let nested = try XCTUnwrap(SpaceRoutes.route("example.com/Work/project", to: home.id))
+        let routes = [nested, whole, workRoute]
+        for address in ["https://example.com/Work", "https://example.com/Work/", "https://sub.example.com/Work/doc?q=1#section"] {
+            XCTAssertEqual(SpaceRoutes.match(url(address), in: routes), workRoute, address)
+        }
+        for address in ["https://example.com/Workbook", "https://example.com/work", "https://example.com/other"] {
+            XCTAssertEqual(SpaceRoutes.match(url(address), in: routes), whole, address)
+        }
+        XCTAssertEqual(SpaceRoutes.match(url("https://example.com/Work/project/doc"), in: routes), nested)
+        let subdomain = SpaceRoute(site: "sub.example.com", space: home.id)
+        XCTAssertEqual(SpaceRoutes.match(url("https://sub.example.com/Work/doc"), in: routes + [subdomain]), subdomain)
+    }
+
+    func testEscapedSlashDoesNotBecomeAPathBoundary() throws {
+        let route = try XCTUnwrap(SpaceRoutes.route("example.com/team%2fwork", to: work.id))
+        XCTAssertEqual(SpaceRoutes.match(url("https://example.com/team%2Fwork/doc"), in: [route]), route)
+        XCTAssertNil(SpaceRoutes.match(url("https://example.com/team/work/doc"), in: [route]))
+        let team = try XCTUnwrap(SpaceRoutes.route("example.com/team", to: home.id))
+        XCTAssertNil(SpaceRoutes.match(url("https://example.com/team%2Fwork/doc"), in: [team]))
+    }
+
+    func testEscapedDotSegmentsMatchTheResolvedPage() throws {
+        let workRoute = try XCTUnwrap(SpaceRoutes.route("example.com/work", to: work.id))
+        let homeRoute = try XCTUnwrap(SpaceRoutes.route("example.com/home", to: home.id))
+        for dots in ["%2e%2e", ".%2E", "%2e."] {
+            XCTAssertEqual(SpaceRoutes.match(url("https://example.com/work/\(dots)/home"), in: [workRoute, homeRoute]), homeRoute)
+        }
+        XCTAssertEqual(SpaceRoutes.route("example.com/work/%2e/child", to: work.id)?.path, "/work/child")
+        XCTAssertEqual(SpaceRoutes.route("example.com/work/file%2Etxt", to: work.id)?.path, "/work/file%2Etxt")
+    }
+
+    func testInternationalDomainsKeepMatchingAfterPersistence() throws {
+        let route = try XCTUnwrap(SpaceRoutes.route("bücher.de/work", to: work.id))
+        XCTAssertEqual(route.site, "xn--bcher-kva.de")
+        let restored = try XCTUnwrap(SpaceRoute(plist: route.plist))
+        XCTAssertEqual(restored, route)
+        XCTAssertEqual(SpaceRoutes.match(url("https://bücher.de/work/page"), in: [restored]), restored)
+        let legacy = try XCTUnwrap(SpaceRoute(plist: ["site": "bücher.de", "space": work.id.uuidString]))
+        XCTAssertEqual(legacy.site, route.site)
+        XCTAssertEqual(SpaceRoutes.match(url("https://xn--bcher-kva.de/other"), in: [legacy]), legacy)
+    }
+
+    func testPathRulesPersistBesideWholeSiteRules() throws {
+        let whole = SpaceRoute(site: "example.com", space: home.id)
+        let path = try XCTUnwrap(SpaceRoutes.route("example.com/work/", to: work.id))
+        XCTAssertNil(whole.plist["path"], "old whole-site dictionaries stay unchanged")
+        XCTAssertEqual(SpaceRoute(plist: path.plist), path)
+        let local = try XCTUnwrap(SpaceRoutes.route("http://[::1]:8000/work", to: work.id))
+        XCTAssertEqual(SpaceRoute(plist: local.plist), local)
+        XCTAssertNotEqual(whole.id, path.id)
+        XCTAssertNil(SpaceRoute(plist: ["site": "example.com", "path": "work", "space": work.id.uuidString]))
+
+        let previous = Shared.prefs.spaceRoutes
+        defer { Shared.prefs.spaceRoutes = previous }
+        Shared.prefs.spaceRoutes = [whole]
+        SpaceRoutes.set("example.com/work/", to: work.id)
+        XCTAssertEqual(Shared.prefs.spaceRoutes, [whole, path])
+        SpaceRoutes.set("example.com/work", to: home.id)
+        XCTAssertEqual(Shared.prefs.spaceRoutes.count, 2)
+        SpaceRoutes.remove("example.com")
+        XCTAssertEqual(Shared.prefs.spaceRoutes.map(\.id), [path.id])
+    }
+
     func testOffByDefaultFindableAndKeptBetweenRuns() {
         let keys = [SpaceRoutes.key, SpaceRoutes.rulesKey]
         let saved = keys.map { ($0, Store.settings.object(forKey: $0)) }
@@ -89,5 +167,58 @@ final class SpaceRoutesTests: XCTestCase {
         }
         XCTAssertEqual(SettingsIndex.item("spaces.links")?.page, .spaces)
         XCTAssertEqual(SettingsIndex.item("spaces.links")?.parent, "spaces")
+    }
+
+    func testTabMenuRemovesTheMatchingPathRuleFromAnotherSpace() throws {
+        let whole = SpaceRoute(site: "example.com", space: home.id)
+        let path = SpaceRoute(site: "example.com", space: work.id, path: "/Work")
+        let sibling = SpaceRoute(site: "example.com", space: work.id, path: "/Personal")
+        let previous = Shared.prefs.spaceRoutes
+        defer { Shared.prefs.spaceRoutes = previous }
+        Shared.prefs.spaceRoutes = [whole, path, sibling]
+
+        let action = try XCTUnwrap(SpaceRoutes.tabMenuAction(for: url("https://example.com/Work/doc"),
+            routes: Shared.prefs.spaceRoutes, current: home, spaces: spaces))
+        XCTAssertEqual(action, .remove(path, destination: "Work"))
+        XCTAssertEqual(action.title, "Remove Rule: example.com/Work → Work")
+        action.run()
+        XCTAssertEqual(Shared.prefs.spaceRoutes, [whole, sibling], "Only the displayed rule is removed")
+        XCTAssertEqual(SpaceRoutes.match(url("https://example.com/Work/doc"), in: Shared.prefs.spaceRoutes), whole)
+    }
+
+    func testTabMenuNamesTheEffectiveParentOrMoreSpecificHostRule() throws {
+        let parent = SpaceRoute(site: "example.com", space: work.id, path: "/Work")
+        let specific = SpaceRoute(site: "docs.example.com", space: home.id)
+        let address = url("https://docs.example.com/Work/doc?view=1#section")
+        XCTAssertEqual(SpaceRoutes.tabMenuAction(for: address, routes: [parent], current: home, spaces: spaces),
+                       .remove(parent, destination: "Work"))
+        let action = try XCTUnwrap(SpaceRoutes.tabMenuAction(for: address, routes: [parent, specific],
+                                                            current: work, spaces: spaces))
+        XCTAssertEqual(action, .remove(specific, destination: "Home"))
+        XCTAssertEqual(action.title, "Remove Rule: docs.example.com → Home")
+    }
+
+    func testTabMenuCanRemoveARuleWhoseDestinationWasDeleted() throws {
+        let gone = SpaceRoute(site: "example.com", space: UUID(), path: "/Work")
+        let action = try XCTUnwrap(SpaceRoutes.tabMenuAction(for: url("https://example.com/Work"),
+                                                            routes: [gone], current: home, spaces: spaces))
+        XCTAssertEqual(action, .remove(gone, destination: nil))
+        XCTAssertEqual(action.title, "Remove Rule: example.com/Work (space removed)")
+    }
+
+    func testTabMenuStillCreatesAWholeSiteRuleForAnUnmatchedPage() throws {
+        let path = SpaceRoute(site: "example.com", space: work.id, path: "/Work")
+        let previous = Shared.prefs.spaceRoutes
+        defer { Shared.prefs.spaceRoutes = previous }
+        Shared.prefs.spaceRoutes = [path]
+
+        let action = try XCTUnwrap(SpaceRoutes.tabMenuAction(for: url("https://example.com/Workbook"),
+            routes: Shared.prefs.spaceRoutes, current: home, spaces: spaces))
+        XCTAssertEqual(action, .set(site: "example.com", space: home))
+        XCTAssertEqual(action.title, "Always Open example.com in Home")
+        action.run()
+        XCTAssertEqual(Shared.prefs.spaceRoutes, [path, SpaceRoute(site: "example.com", space: home.id)])
+        XCTAssertNil(SpaceRoutes.tabMenuAction(for: url("file:///tmp/page.html"), routes: [],
+                                               current: home, spaces: spaces))
     }
 }

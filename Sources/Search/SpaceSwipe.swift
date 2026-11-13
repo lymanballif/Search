@@ -99,6 +99,10 @@ final class SpaceSwipe {
     /// fingers went, and that profile's window takes this one's place, its
     /// rows coming in from the other side (see OneWindow.swift).
     private func leave(_ browser: Browser, for space: UUID, step: Int) {
+        guard space != browser.spaceID else {
+            withAnimation(Motion.settle) { browser.spaceSwipe = 0 }
+            return
+        }
         let width = browser.prefs.sidebar ? browser.prefs.columnWidth : Metrics.strip
         browser.spaceStep = step
         resting = Date().addingTimeInterval(SpaceSwipe.rest)
@@ -107,6 +111,7 @@ final class SpaceSwipe {
             still.disablesAnimations = true
             withTransaction(still) {
                 browser.switchSpace(to: space)
+                browser.spaceStep = step
                 browser.spaceSwipe = 0
             }
             guard let next = Browsers.front, next !== browser, next.spaceID == space else { return }
@@ -259,7 +264,7 @@ final class SpaceSwipe {
     /// Nothing that way: the rows give a little, and come back.
     private func resisted(_ travel: CGFloat, in browser: Browser) -> CGFloat {
         let here = browser.makingSpace ? browser.spaces.count : (browser.spaces.firstIndex { $0.id == browser.spaceID } ?? 0)
-        let blocked = (travel > 0 && here == 0 && browser.profileBeyond(-1) == nil) || (travel < 0 && here == browser.spaces.count)
+        let blocked = (travel > 0 && here == 0 && browser.spaceBeyond(-1) == nil) || (travel < 0 && here == browser.spaces.count)
         return blocked ? travel / 4 : travel
     }
 

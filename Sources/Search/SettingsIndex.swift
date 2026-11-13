@@ -163,6 +163,15 @@ enum SettingsIndex {
               title: "What's playing in other tabs", detail: "At the foot of the sidebar, to pause it, play it again or go to it",
               more: "A tab playing sound while you're on another one shows above the sidebar's foot.",
               keys: ["sidebar.player"], words: ["media", "music", "now playing", "pause", "player", "sound", "audio"], parent: "tabs.layout"),
+        .init(id: "sidebar.extensions", group: "tablook", icon: "puzzlepiece.extension",
+              title: "Show extensions below the tabs", detail: "The puzzle and pinned extensions; manage them in Settings › Extensions",
+              keys: ["sidebar.extensions"], words: ["footer", "buttons", "hide", "column"], parent: "tabs.layout"),
+        .init(id: "sidebar.bookmarks", group: "tablook", icon: "bookmark",
+              title: "Show bookmarks below the tabs", detail: "Bookmarks are also available in the Bookmarks menu",
+              keys: ["sidebar.bookmarks"], words: ["footer", "buttons", "hide", "column"], parent: "tabs.layout"),
+        .init(id: "sidebar.profiles", group: "tablook", icon: "person.crop.circle",
+              title: "Show the profile below the tabs", detail: "Hide its mark to keep only the space's; File › Profile still lists your profiles",
+              keys: ["sidebar.profiles"], words: ["footer", "buttons", "hide", "badge", "column"], parent: "tabs.layout"),
         .init(id: "glyph", group: "tablook", icon: "app",
               title: "Tabs show", detail: "Beside the title, and on a pinned square",
               keys: ["glyph"], words: ["favicon", "icons", "letters"]),
@@ -297,6 +306,9 @@ enum SettingsIndex {
               title: "Spaces", detail: "Separate sets of tabs, switched with ⌃1–⌃9 or a swipe",
               more: "Each space can be signed in where the others are or start afresh. Mission Control's own ⌃1–⌃9, if you turned them on, take those keys first.",
               keys: ["spaces"], words: ["workspaces", "profiles"]),
+        .init(id: "spaces.swipeWrap", group: "spaces", icon: "arrow.triangle.2.circlepath",
+              title: "Swiping through spaces goes round", detail: "Past the last space, return to the first; past the first, return to the last",
+              keys: ["spaces.swipeWrap"], words: ["wrap", "cycle", "loop", "swipe"], parent: "spaces"),
         .init(id: "profiles", group: "spaces", icon: "person.2",
               title: "Profiles", detail: "Spaces with their own sign-ins, history and bookmarks",
               more: "In windows of their own, unless Profiles in one window is on. Extensions, passwords and settings are shared.",
@@ -306,10 +318,10 @@ enum SettingsIndex {
               more: "Choosing a space of another profile brings that profile's window into this one's place, so each keeps its own sign-ins. Closing it closes them all.",
               keys: ["profiles.oneWindow"], words: ["arc", "profiles", "single window", "merge"], parent: "profiles"),
         .init(id: "spaces.links", group: "spaces", icon: "arrow.triangle.branch",
-              title: "Send links to a space", detail: "Links to sites you choose open in their space, with its sign-ins",
-              more: "Links from other apps, and links a page in another space opens in a new tab. A site includes its subdomains. Typed addresses, links followed in their own tab and private tabs stay where they are. Right-click a tab to send its site to the space it is in.",
+              title: "Send links to a space", detail: "Links to sites or paths you choose open in their space, with its sign-ins",
+              more: "Links from other apps, and links a page in another space opens in a new tab. A site includes its subdomains; a path includes the pages below it. The most specific site wins, then its longest matching path. Typed addresses, links followed in their own tab and private tabs stay where they are. Right-click a tab to send its site to the space it is in.",
               keys: [SpaceRoutes.key, SpaceRoutes.rulesKey],
-              words: ["arc", "air traffic control", "route", "routing", "rules", "domain", "site", "open in space", "default space", "links from other apps"],
+              words: ["arc", "air traffic control", "route", "routing", "rules", "domain", "site", "path", "open in space", "default space", "links from other apps"],
               parent: "spaces"),
         .init(id: "pins.keep", group: "pins", icon: "pin.circle",
               title: "Pins keep their site", detail: "Links elsewhere open over the pin, and ⌘W takes it back home",
@@ -488,17 +500,23 @@ enum SettingsIndex {
 
     private static func groupOrder(_ id: String) -> Int { groups.firstIndex { $0.id == id } ?? 0 }
 
+    /// Features with no switch belong apart from things you can change.
+    /// A find-only control, such as spelling, is still a setting.
+    static func splitResults(_ matches: [SettingsItem]) -> (settings: [SettingsItem], information: [SettingsItem]) {
+        (matches.filter { $0.kind != .note }, matches.filter { $0.kind == .note })
+    }
+
     /// Whether a dependent row means anything as things are set now. Its
     /// section hides it otherwise; the find field shows it dimmed.
     @MainActor static func applies(_ item: SettingsItem, _ prefs: Preferences) -> Bool {
         switch item.id {
         case "pages.dusk": return prefs.look != .light
         case "sidebar.roomy", "sidebar.player": return prefs.sidebar && !prefs.sideIcons
-        case "sidebar.hides", "layout.cards", "pins.list": return prefs.sidebar
+        case "sidebar.hides", "layout.cards", "pins.list", "sidebar.extensions", "sidebar.bookmarks", "sidebar.profiles": return prefs.sidebar
         case "sidebar.foldIcons": return prefs.sidebar && !prefs.sideHides
         case "toolbar.left": return !prefs.sidebar
         case "profiles.oneWindow": return Profiles.shared.several
-        case "spaces.links": return prefs.usesSpaces
+        case "spaces.links", "spaces.swipeWrap": return prefs.usesSpaces
         case "tabs.frontBeside": return prefs.newTabPlace == .next
         case "newtab.recent": return prefs.floatingNewTab
         case "links.little.tabs": return prefs.littleLinks
@@ -514,7 +532,7 @@ enum SettingsIndex {
         case "sidebar.roomy": return "Only with titles in the column"
         case "sidebar.foldIcons": return "Only with the column down a side and not hidden until the edge"
         case "profiles.oneWindow": return "Only with more than one profile"
-        case "spaces.links": return "Only with Spaces on"
+        case "spaces.links", "spaces.swipeWrap": return "Only with Spaces on"
         case "sidebar.player": return "Only with titles in the sidebar"
         case "tabs.frontBeside": return "Only with New tab position on After current"
         case "newtab.recent": return "Only with the new tab in a floating field"
@@ -676,6 +694,10 @@ extension SettingsIndex {
         [
             "tabs.layout": prefs.tabsLayout.rawValue,
             "tabs.doubleClick": prefs.tabDoubleClick.rawValue,
+            "sidebar.extensions": prefs.showsSidebarExtensions,
+            "sidebar.bookmarks": prefs.showsSidebarBookmarks,
+            "sidebar.profiles": prefs.showsSidebarProfiles,
+            "spaces.swipeWrap": prefs.wrapSpaceSwipes,
             "pins.typedAside": prefs.pinsTypedAside,
             "tabs.sleep": prefs.sleepChoice.rawValue,
             "float.own": prefs.floatOwn.rawValue,
@@ -710,6 +732,18 @@ extension SettingsIndex {
         case "tabs.doubleClick":
             guard let choice = (value as? String).flatMap(TabDoubleClick.init) else { return false }
             prefs.tabDoubleClick = choice
+        case "sidebar.extensions":
+            guard let on = value as? Bool else { return false }
+            prefs.showsSidebarExtensions = on
+        case "sidebar.bookmarks":
+            guard let on = value as? Bool else { return false }
+            prefs.showsSidebarBookmarks = on
+        case "sidebar.profiles":
+            guard let on = value as? Bool else { return false }
+            prefs.showsSidebarProfiles = on
+        case "spaces.swipeWrap":
+            guard let on = value as? Bool else { return false }
+            prefs.wrapSpaceSwipes = on
         case "pins.typedAside":
             guard let on = value as? Bool else { return false }
             prefs.pinsTypedAside = on
