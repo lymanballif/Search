@@ -1606,16 +1606,13 @@ struct TabMenu: View {
             }
             .help("Pages moved to a Space with different sign-ins reopen there.")
         }
-        // Settings › Spaces & Pins › Send links to a space, from here: the
-        // tab's site to the space it is in, or back out of it.
+        // Settings › Spaces & Pins › Send links to a space, from here:
+        // remove the matching rule, or send an unruled site to this space.
         if browser.prefs.usesSpaces, browser.prefs.sendsLinksToSpaces, !tab.shy, !tab.bench,
-           let site = tab.address.flatMap(SpaceRoutes.site(of:)) {
-            let space = browser.space
-            if browser.prefs.spaceRoutes.contains(SpaceRoute(site: site, space: space.id)) {
-                Button("Stop Opening \(site) in \(space.name)") { SpaceRoutes.remove(site) }
-            } else {
-                Button("Always Open \(site) in \(space.name)") { SpaceRoutes.set(site, to: space.id) }
-            }
+           let url = tab.address,
+           let action = SpaceRoutes.tabMenuAction(for: url, routes: browser.prefs.spaceRoutes,
+                                                  current: browser.space, spaces: Spaces.known) {
+            Button(action.title) { action.run() }
         }
         if browser.prefs.splitView {
             // Right-clicked among tabs picked in the column: those two side

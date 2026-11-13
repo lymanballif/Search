@@ -165,6 +165,41 @@ enum SpaceRoutes {
             }
     }
 
+    enum TabMenuAction: Equatable {
+        case remove(SpaceRoute, destination: String?)
+        case set(site: String, space: Space)
+
+        var title: String {
+            switch self {
+            case let .remove(route, destination):
+                // A broader rule may still apply after this one is removed.
+                // Name the rule, rather than promise that routing will stop.
+                return "Remove Rule: \(route.id)" + (destination.map { " → \($0)" } ?? " (space removed)")
+            case let .set(site, space):
+                return "Always Open \(site) in \(space.name)"
+            }
+        }
+
+        @MainActor func run() {
+            switch self {
+            case let .remove(route, _): SpaceRoutes.remove(route.id)
+            case let .set(site, space): SpaceRoutes.set(site, to: space.id)
+            }
+        }
+    }
+
+    /// The tab can be in a different space from the rule's destination.
+    /// Offer the rule that actually matches, including a parent domain or
+    /// path, and keep whole-site creation for a page with no matching rule.
+    static func tabMenuAction(for url: URL, routes: [SpaceRoute], current: Space,
+                              spaces: [UUID: Space]) -> TabMenuAction? {
+        guard let site = site(of: url) else { return nil }
+        if let route = match(url, in: routes) {
+            return .remove(route, destination: spaces[route.space]?.name)
+        }
+        return .set(site: site, space: current)
+    }
+
     /// The space a rule sends an address to: only while the setting and
     /// spaces are both on, and only a space that is still there.
     static func space(for url: URL, routes: [SpaceRoute], on: Bool, spaces: [UUID: Space]) -> Space? {

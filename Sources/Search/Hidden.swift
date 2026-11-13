@@ -41,6 +41,7 @@ struct HiddenPanel: View {
                 Spacer()
             }
         }
+        .background(HiddenPanelClickAway { [weak browser] in browser?.reviewing = false })
         .onDisappear { browser.stopPeeking() }
         // Leaving the panel puts the page back the way it was.
         .onHover { inside in
@@ -86,5 +87,73 @@ struct HiddenPanel: View {
             }
             .animation(Motion.quick, value: hovering)
         }
+    }
+}
+
+/// Observe clicks instead of laying a hit-testing view over the page: the
+/// page must still receive scrolling while this list is open.
+private struct HiddenPanelClickAway: NSViewRepresentable {
+    let close: () -> Void
+
+    func makeNSView(context: Context) -> HiddenPanelClickAwayView {
+        let view = HiddenPanelClickAwayView()
+        view.close = close
+        return view
+    }
+
+    func updateNSView(_ view: HiddenPanelClickAwayView, context: Context) {
+        view.close = close
+    }
+
+    static func dismantleNSView(_ view: HiddenPanelClickAwayView, coordinator: ()) {
+        view.stop()
+        view.close = nil
+    }
+}
+
+final class HiddenPanelClickAwayView: NSView {
+    var close: (() -> Void)?
+    private var monitor: Any?
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        stop()
+        guard window != nil else { return }
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
+            guard let self else { return event }
+            return self.filter(event)
+        }
+    }
+
+    /// The card's own controls and other windows keep their clicks. An
+    /// outside click only dismisses, as the old backdrop did; it must not
+    /// also follow a link underneath the panel.
+    func filter(_ event: NSEvent) -> NSEvent? {
+        guard monitor != nil, event.type == .leftMouseDown,
+              let window, event.window === window, !isHiddenOrHasHiddenAncestor,
+              !bounds.isEmpty, !bounds.contains(convert(event.locationInWindow, from: nil))
+        else { return event }
+        // The old backdrop was inside the content view, beneath native
+        // window controls. Closing or minimising still works on one click.
+        guard let content = window.contentView,
+              content.convert(content.bounds, to: nil).contains(event.locationInWindow),
+              ![NSWindow.ButtonType.closeButton, .miniaturizeButton, .zoomButton].contains(where: { kind in
+                  guard let button = window.standardWindowButton(kind), !button.isHiddenOrHasHiddenAncestor else { return false }
+                  return button.convert(button.bounds, to: nil).contains(event.locationInWindow)
+              })
+        else { return event }
+        close?()
+        return nil
+    }
+
+    func stop() {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+    }
+
+    deinit {
+        if let monitor { NSEvent.removeMonitor(monitor) }
     }
 }

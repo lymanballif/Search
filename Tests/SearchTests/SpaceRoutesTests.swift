@@ -168,4 +168,57 @@ final class SpaceRoutesTests: XCTestCase {
         XCTAssertEqual(SettingsIndex.item("spaces.links")?.page, .spaces)
         XCTAssertEqual(SettingsIndex.item("spaces.links")?.parent, "spaces")
     }
+
+    func testTabMenuRemovesTheMatchingPathRuleFromAnotherSpace() throws {
+        let whole = SpaceRoute(site: "example.com", space: home.id)
+        let path = SpaceRoute(site: "example.com", space: work.id, path: "/Work")
+        let sibling = SpaceRoute(site: "example.com", space: work.id, path: "/Personal")
+        let previous = Shared.prefs.spaceRoutes
+        defer { Shared.prefs.spaceRoutes = previous }
+        Shared.prefs.spaceRoutes = [whole, path, sibling]
+
+        let action = try XCTUnwrap(SpaceRoutes.tabMenuAction(for: url("https://example.com/Work/doc"),
+            routes: Shared.prefs.spaceRoutes, current: home, spaces: spaces))
+        XCTAssertEqual(action, .remove(path, destination: "Work"))
+        XCTAssertEqual(action.title, "Remove Rule: example.com/Work → Work")
+        action.run()
+        XCTAssertEqual(Shared.prefs.spaceRoutes, [whole, sibling], "Only the displayed rule is removed")
+        XCTAssertEqual(SpaceRoutes.match(url("https://example.com/Work/doc"), in: Shared.prefs.spaceRoutes), whole)
+    }
+
+    func testTabMenuNamesTheEffectiveParentOrMoreSpecificHostRule() throws {
+        let parent = SpaceRoute(site: "example.com", space: work.id, path: "/Work")
+        let specific = SpaceRoute(site: "docs.example.com", space: home.id)
+        let address = url("https://docs.example.com/Work/doc?view=1#section")
+        XCTAssertEqual(SpaceRoutes.tabMenuAction(for: address, routes: [parent], current: home, spaces: spaces),
+                       .remove(parent, destination: "Work"))
+        let action = try XCTUnwrap(SpaceRoutes.tabMenuAction(for: address, routes: [parent, specific],
+                                                            current: work, spaces: spaces))
+        XCTAssertEqual(action, .remove(specific, destination: "Home"))
+        XCTAssertEqual(action.title, "Remove Rule: docs.example.com → Home")
+    }
+
+    func testTabMenuCanRemoveARuleWhoseDestinationWasDeleted() throws {
+        let gone = SpaceRoute(site: "example.com", space: UUID(), path: "/Work")
+        let action = try XCTUnwrap(SpaceRoutes.tabMenuAction(for: url("https://example.com/Work"),
+                                                            routes: [gone], current: home, spaces: spaces))
+        XCTAssertEqual(action, .remove(gone, destination: nil))
+        XCTAssertEqual(action.title, "Remove Rule: example.com/Work (space removed)")
+    }
+
+    func testTabMenuStillCreatesAWholeSiteRuleForAnUnmatchedPage() throws {
+        let path = SpaceRoute(site: "example.com", space: work.id, path: "/Work")
+        let previous = Shared.prefs.spaceRoutes
+        defer { Shared.prefs.spaceRoutes = previous }
+        Shared.prefs.spaceRoutes = [path]
+
+        let action = try XCTUnwrap(SpaceRoutes.tabMenuAction(for: url("https://example.com/Workbook"),
+            routes: Shared.prefs.spaceRoutes, current: home, spaces: spaces))
+        XCTAssertEqual(action, .set(site: "example.com", space: home))
+        XCTAssertEqual(action.title, "Always Open example.com in Home")
+        action.run()
+        XCTAssertEqual(Shared.prefs.spaceRoutes, [path, SpaceRoute(site: "example.com", space: home.id)])
+        XCTAssertNil(SpaceRoutes.tabMenuAction(for: url("file:///tmp/page.html"), routes: [],
+                                               current: home, spaces: spaces))
+    }
 }

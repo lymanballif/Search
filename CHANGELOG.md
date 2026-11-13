@@ -13,8 +13,9 @@ in [ROADMAP.md](ROADMAP.md).
 
 ### Fixed
 
+- A tab's menu recognizes the matching path rule for Send links to a space and removes that exact rule, leaving other paths and whole-site rules intact.
 - Putting down a pin before its page finishes loading stops its spinner.
-- The hidden-elements list leaves the page scrollable, and leaving a preview returns the page and its nested scrollers to their previous positions.
+- The hidden-elements list leaves the page scrollable, closes on an outside click, and returns the page and its nested scrollers to their previous positions after a preview.
 - Moving a tab to a window with different space sign-ins asks before discarding unsaved form entries. A canceled move keeps the original page.
 - A completed address keeps the site and what you typed in view, instead of scrolling to the end of a long URL. Completion selection also counts Unicode correctly. ([#1055](https://github.com/driceroland/Search/issues/1055))
 - A pin put down no longer keeps a stale page picture in the tab switcher or an active minus button in its row. Closing it again leaves the selected page alone. ([#1050](https://github.com/driceroland/Search/issues/1050))
